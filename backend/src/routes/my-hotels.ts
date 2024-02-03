@@ -1,7 +1,8 @@
 import express, { Request, Response } from "express";
 import multer from "multer";
 import cloudinary from "cloudinary";
-import Hotel, { HotelType } from "../models/hotel";
+import Hotel from "../models/hotel";
+import { HotelType } from "../shared/types";
 import verifyToken from "../middleware/auth";
 import { body } from "express-validator";
 
@@ -32,14 +33,7 @@ router.post(
 			const imageFiles = req.files as Express.Multer.File[];
 			const newHotel: HotelType = req.body;
 
-			const uploadPromises = imageFiles.map(async (image) => {
-				const b64 = Buffer.from(image.buffer).toString("base64")
-				let dataURI = "data:" + image.mimetype + ";base64," + b64;
-				const res = await cloudinary.v2.uploader.upload(dataURI);
-				return res.url;
-			});
-
-			const imageUrls = await Promise.all(uploadPromises);
+			const imageUrls = await uploadImages(imageFiles);
 			newHotel.imageUrls = imageUrls;
 			newHotel.lastUpdated = new Date();
 			newHotel.userId = req.userId;
@@ -53,6 +47,27 @@ router.post(
 			res.status(500).json({ message: "Something went wrong" });
 		}
 });
+
+router.get("/", verifyToken, async (req: Request, res: Response) => {
+	try {
+		const hotels = await Hotel.find({ userId: req.userId });
+		res.json(hotels);
+	} catch (error) {
+		res.status(500).json({ message: "Error fetching hotels" });
+	}
+});
+
+async function uploadImages(imageFiles: Express.Multer.File[]) {
+	const uploadPromises = imageFiles.map(async (image) => {
+		const b64 = Buffer.from(image.buffer).toString("base64");
+		let dataURI = "data:" + image.mimetype + ";base64," + b64;
+		const res = await cloudinary.v2.uploader.upload(dataURI);
+		return res.url;
+	});
+  
+	const imageUrls = await Promise.all(uploadPromises);
+	return imageUrls;
+}
 
 export default router;
 
